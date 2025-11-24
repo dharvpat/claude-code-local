@@ -1,0 +1,94 @@
+{
+  "models": {
+    "llama3.1:*": {
+      "tier": 1,
+      "format": "openai",
+      "supports_native_tools": true,
+      "notes": "Full OpenAI function calling support"
+    },
+    "llama3.2:*": {
+      "tier": 1,
+      "format": "openai",
+      "supports_native_tools": true,
+      "notes": "Full OpenAI function calling support"
+    },
+    "llama3:*": {
+      "tier": 1,
+      "format": "openai",
+      "supports_native_tools": true,
+      "notes": "Full OpenAI function calling support (3.1+)"
+    },
+    "mistral:*": {
+      "tier": 1,
+      "format": "openai",
+      "supports_native_tools": true,
+      "notes": "Full OpenAI function calling support"
+    },
+    "mistral-large:*": {
+      "tier": 1,
+      "format": "openai",
+      "supports_native_tools": true,
+      "notes": "Excellent function calling"
+    },
+    "qwen2.5-coder:14b": {
+      "tier": 2,
+      "format": "qwen",
+      "supports_native_tools": true,
+      "notes": "Partial function calling, benefits from prompting"
+    },
+    "qwen2.5-coder:32b": {
+      "tier": 2,
+      "format": "qwen",
+      "supports_native_tools": true,
+      "notes": "Good function calling support"
+    },
+    "qwen2.5-coder:7b": {
+      "tier": 3,
+      "format": "prompt-based",
+      "supports_native_tools": false,
+      "notes": "No native function calling, use prompt-based"
+    },
+    "qwen2.5-coder:1.5b": {
+      "tier": 3,
+      "format": "prompt-based",
+      "supports_native_tools": false,
+      "notes": "Too small for reliable tool use"
+    },
+    "deepseek-r1:*": {
+      "tier": 2,
+      "format": "deepseek",
+      "supports_native_tools": true,
+      "notes": "Function calling via reasoning chain"
+    },
+    "deepseek-coder:*": {
+      "tier": 2,
+      "format": "deepseek",
+      "supports_native_tools": true,
+      "notes": "Some function calling support"
+    },
+    "codellama:*": {
+      "tier": 2,
+      "format": "openai",
+      "supports_native_tools": false,
+      "notes": "No tools but can follow instructions"
+    },
+    "phi3:*": {
+      "tier": 3,
+      "format": "prompt-based",
+      "supports_native_tools": false,
+      "notes": "No native tools"
+    },
+    "gemma:*": {
+      "tier": 3,
+      "format": "prompt-based",
+      "supports_native_tools": false,
+      "notes": "No native tools"
+    },
+    "*": {
+      "tier": 3,
+      "format": "prompt-based",
+      "supports_native_tools": false,
+      "notes": "Default fallback for unknown models"
+    }
+  }
+}

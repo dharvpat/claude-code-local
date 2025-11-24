@@ -25,6 +25,9 @@ from context_manager import ContextManager
 from summarizer import Summarizer
 from context_retrieval import ContextRetrieval
 
+# Import tool adapter
+from tool_adapter import UniversalToolAdapter
+
 # Load environment variables
 load_dotenv()
 
@@ -44,6 +47,13 @@ AUTO_SESSION = os.getenv("AUTO_SESSION", "true").lower() == "true"
 SMART_RETRIEVAL = os.getenv("SMART_RETRIEVAL", "true").lower() == "true"
 RETRIEVAL_THRESHOLD = float(os.getenv("RETRIEVAL_THRESHOLD", "0.6"))
 
+# Tool Adapter Configuration
+TOOL_ADAPTER_ENABLED = os.getenv("TOOL_ADAPTER_ENABLED", "true").lower() == "true"
+TOOL_ADAPTER_GUIDED = os.getenv("TOOL_ADAPTER_GUIDED", "true").lower() == "true"
+TOOL_ADAPTER_FALLBACK = os.getenv("TOOL_ADAPTER_FALLBACK", "true").lower() == "true"
+TOOL_ADAPTER_NL_DETECTION = os.getenv("TOOL_ADAPTER_NL_DETECTION", "false").lower() == "true"
+TOOL_ADAPTER_DEBUG = os.getenv("TOOL_ADAPTER_DEBUG", "false").lower() == "true"
+
 # Setup logging
 logging.basicConfig(
     level=logging.DEBUG if DEBUG else logging.INFO,
@@ -60,11 +70,29 @@ context_manager = None
 summarizer = None
 context_retrieval = None
 
+# Global tool adapter
+tool_adapter = None
+
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize caching components on startup"""
-    global cache_store, session_manager, context_manager, summarizer, context_retrieval
+    """Initialize caching components and tool adapter on startup"""
+    global cache_store, session_manager, context_manager, summarizer, context_retrieval, tool_adapter
+
+    # Initialize tool adapter
+    if TOOL_ADAPTER_ENABLED:
+        logger.info("Initializing Universal Tool Adapter...")
+        tool_adapter = UniversalToolAdapter(
+            ollama_model=OLLAMA_MODEL,
+            guided_mode=TOOL_ADAPTER_GUIDED,
+            enable_fallback=TOOL_ADAPTER_FALLBACK,
+            enable_natural_language_detection=TOOL_ADAPTER_NL_DETECTION,
+            debug=TOOL_ADAPTER_DEBUG
+        )
+        model_info = tool_adapter.get_model_info()
+        logger.info(f"Tool Adapter initialized: {model_info['description']}")
+    else:
+        logger.info("Tool Adapter is disabled")
 
     if CACHE_ENABLED:
         logger.info("Initializing context caching system...")
@@ -337,9 +365,26 @@ async def create_message(
             all_messages = messages
             session_id = None
 
+        # Use tool adapter if enabled
+        adapted_system = system
+        adapted_tools = None
+
+        if TOOL_ADAPTER_ENABLED and tool_adapter and tools:
+            logger.debug(f"Using tool adapter for {len(tools)} tools")
+            adapted_request = tool_adapter.prepare_request(body)
+
+            adapted_system = adapted_request["system"]
+            adapted_tools = adapted_request.get("ollama_tools")
+
+            logger.info(f"Tool adapter prepared request: {adapted_request['format']} format")
+        elif tools:
+            # Fallback: pass tools through without adaptation
+            logger.warning("Tools requested but Tool Adapter is disabled")
+            adapted_tools = tools
+
         # Translate messages to Ollama format
         translator = AnthropicToOllamaTranslator()
-        ollama_messages = translator.translate_messages(all_messages, system)
+        ollama_messages = translator.translate_messages(all_messages, adapted_system)
 
         # Build Ollama request
         ollama_request = {
@@ -353,9 +398,9 @@ async def create_message(
             }
         }
 
-        if tools:
-            logger.warning("Tools requested but Ollama tool support is model-dependent")
-            ollama_request["tools"] = tools
+        # Add adapted tools if available
+        if adapted_tools:
+            ollama_request["tools"] = adapted_tools
 
         logger.debug(f"Sending to Ollama: {json.dumps(ollama_request, indent=2)[:500]}...")
 
@@ -370,8 +415,29 @@ async def create_message(
 
         logger.debug(f"Received from Ollama: {json.dumps(ollama_response, indent=2)[:500]}...")
 
-        # Translate response back to Anthropic format
-        anthropic_response = translator.translate_response(ollama_response, body)
+        # Parse response with tool adapter if enabled and tools were provided
+        if TOOL_ADAPTER_ENABLED and tool_adapter and tools:
+            content_blocks, parse_metadata = tool_adapter.parse_response(ollama_response, body)
+
+            logger.debug(f"Tool adapter parsed response: {parse_metadata}")
+
+            # Build Anthropic response with parsed content
+            anthropic_response = {
+                "id": f"msg_{hash(str(datetime.now())) % 1000000:06d}",
+                "type": "message",
+                "role": "assistant",
+                "content": content_blocks,
+                "model": body.get("model", "claude-3-opus-20240229"),
+                "stop_reason": "end_turn" if parse_metadata.get("tool_detected") else "end_turn",
+                "stop_sequence": None,
+                "usage": {
+                    "input_tokens": ollama_response.get("prompt_eval_count", 0),
+                    "output_tokens": ollama_response.get("eval_count", 0)
+                }
+            }
+        else:
+            # Fallback: use original translator
+            anthropic_response = translator.translate_response(ollama_response, body)
 
         # Update cache with response
         if CACHE_ENABLED and session_manager and session_id:
@@ -601,6 +667,45 @@ async def get_cache_stats():
         },
         "statistics": stats
     }
+
+
+@app.get("/v1/tool_adapter/info")
+async def get_tool_adapter_info():
+    """Get tool adapter information and capabilities"""
+    if not TOOL_ADAPTER_ENABLED:
+        raise HTTPException(status_code=501, detail="Tool Adapter is disabled")
+
+    if not tool_adapter:
+        raise HTTPException(status_code=500, detail="Tool Adapter not initialized")
+
+    model_info = tool_adapter.get_model_info()
+    stats = tool_adapter.get_statistics()
+
+    return {
+        "enabled": TOOL_ADAPTER_ENABLED,
+        "model": model_info,
+        "configuration": {
+            "guided_mode": TOOL_ADAPTER_GUIDED,
+            "fallback_enabled": TOOL_ADAPTER_FALLBACK,
+            "natural_language_detection": TOOL_ADAPTER_NL_DETECTION,
+            "debug": TOOL_ADAPTER_DEBUG
+        },
+        "statistics": stats
+    }
+
+
+@app.post("/v1/tool_adapter/test")
+async def test_tool_adapter():
+    """Test tool adapter with current model"""
+    if not TOOL_ADAPTER_ENABLED:
+        raise HTTPException(status_code=501, detail="Tool Adapter is disabled")
+
+    if not tool_adapter:
+        raise HTTPException(status_code=500, detail="Tool Adapter not initialized")
+
+    test_results = tool_adapter.test_tool_support()
+
+    return test_results
 
 
 @app.post("/v1/messages/count_tokens")

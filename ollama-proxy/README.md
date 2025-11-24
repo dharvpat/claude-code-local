@@ -17,6 +17,14 @@ Claude Code → Anthropic API Format → Proxy → Ollama API Format → Ollama 
 Claude Code ← Anthropic API Format ← Proxy ← Ollama Response
 ```
 
+## Key Features
+
+✅ **Full API Translation** - Anthropic ↔ Ollama format conversion
+✅ **Tool Support** - Claude Code tools (Read, Write, Edit, Bash) work seamlessly
+✅ **Context Caching** - Persistent sessions with 100K+ token support
+✅ **Smart Retrieval** - Automatically loads relevant past context
+✅ **Complete Privacy** - All data stays on your machine
+
 ## Prerequisites
 
 1. **Ollama** - Install from [https://ollama.ai](https://ollama.ai)
@@ -212,13 +220,16 @@ The proxy also translates responses, including:
 - ✓ Max tokens configuration
 - ✓ Token counting (estimated)
 - ✓ Model listing
+- ✓ **Context caching** - Persistent sessions with 100K+ token support (see [CACHING.md](CACHING.md))
+- ✓ **Tool execution** - All Claude Code tools work (Read, Write, Edit, Bash, etc.) (see [TOOLS.md](TOOLS.md))
 
 ### Limitations
 
 - ⚠ **Tool/Function Calling**: Limited by Ollama model capabilities
   - qwen2.5-coder:7b has limited function calling support
   - Tool calls are converted to text descriptions if not natively supported
-  - This may affect Claude Code's ability to use tools (file editing, bash, etc.)
+  - **Note**: Tools ARE executed client-side and WILL work! See [TOOLS.md](TOOLS.md) for details
+  - For better tool support, use models like deepseek-r1:14b or qwen2.5-coder:14b
 
 - ⚠ **Multi-modal (Images)**: Limited by model support
   - qwen2.5-coder:7b does not support vision
